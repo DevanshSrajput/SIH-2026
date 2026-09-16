@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.1.1</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.govid</groupId>
+  <artifactId>screening</artifactId>
+  <version>0.1.0</version>
+  <name>govtid-screening</name>
+  <description>AI-Based Fake Identity and Document Screening System</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <metadata-extractor.version>2.21.0</metadata-extractor.version>
+    <anthropic.version>2.58.0</anthropic.version>
+    <flapdoodle.version>4.33.0</flapdoodle.version>
+    <javacv.version>1.5.11</javacv.version>
+    <opencv.version>4.10.0-1.5.11</opencv.version>
+    <!--
+      springdoc 3.x is the Spring Boot 4 / Jackson 3 line. The 2.x line targets Boot 3 and
+      will not start here.
+    -->
+    <springdoc.version>3.1.0</springdoc.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-mongodb</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!--
+      Reports configuration keys that moved or were removed in a Spring Boot upgrade.
+      An unknown key is ignored silently, so a renamed property fails invisibly: the
+      Boot 4 move of the Mongo connection keys from `spring.data.mongodb` to
+      `spring.mongodb` silently sent every write to the driver's default `test`
+      database. This logs those at startup instead. Remove once the upgrade settles.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-properties-migrator</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- OpenAPI 3 description of the officer API, plus the Swagger UI that renders it. -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
+    <!-- EXIF / IPTC / XMP extraction for metadata forensics -->
+    <dependency>
+      <groupId>com.drewnoakes</groupId>
+      <artifactId>metadata-extractor</artifactId>
+      <version>${metadata-extractor.version}</version>
+    </dependency>
+
+    <!-- Optional vision OCR engine. Inactive unless an Anthropic credential is present. -->
+    <dependency>
+      <groupId>com.anthropic</groupId>
+      <artifactId>anthropic-java</artifactId>
+      <version>${anthropic.version}</version>
+    </dependency>
+
+    <!-- OpenCV for face detection (DNN) and recognition (SFace embeddings). -->
+    <dependency>
+      <groupId>org.bytedeco</groupId>
+      <artifactId>opencv-platform</artifactId>
+      <version>${opencv.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bytedeco</groupId>
+      <artifactId>javacv-platform</artifactId>
+      <version>${javacv.version}</version>
+      <exclusions>
+        <!-- Pull in only the OpenCV native binaries we need, not every module. -->
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>ffmpeg-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>flycapture-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>libdc1394-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>libfreenect-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>libfreenect2-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>librealsense-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>librealsense2-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>artoolkitplus-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>flandmark-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>leptonica-platform</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.bytedeco</groupId>
+          <artifactId>tesseract-platform</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+      Embedded MongoDB for integration tests, so the full pipeline can be exercised
+      without a running Docker daemon or a local mongod.
+    -->
+    <dependency>
+      <groupId>de.flapdoodle.embed</groupId>
+      <artifactId>de.flapdoodle.embed.mongo.spring4x</artifactId>
+      <version>${flapdoodle.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      Runs the API against an embedded MongoDB instead of a real server, for a machine
+      with no Docker daemon and no local mongod:
+
+        ./mvnw spring-boot:run -Pembedded-mongo
+
+      Data lives only as long as the process. Never use this profile for anything but
+      local development - a screening platform's case history is evidence.
+    -->
+    <profile>
+      <id>embedded-mongo</id>
+      <dependencies>
+        <dependency>
+          <groupId>de.flapdoodle.embed</groupId>
+          <artifactId>de.flapdoodle.embed.mongo.spring4x</artifactId>
+          <version>${flapdoodle.version}</version>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <configuration>
+              <profiles>
+                <profile>embedded</profile>
+              </profiles>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

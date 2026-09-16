@@ -1,0 +1,93 @@
+spring:
+  application:
+    name: govtid-screening
+  mongodb:
+    # Connection settings live under `spring.mongodb` since Spring Boot 4.0. The old
+    # `spring.data.mongodb` connection keys are removed, and an unknown key is ignored
+    # silently rather than failing, so leaving them here loses the database name and
+    # writes everything to the driver default `test`.
+    uri: ${MONGODB_URI:mongodb://localhost:27017/govtid_screening}
+  data:
+    mongodb:
+      # Mapping-side setting; this one is still a `spring.data.mongodb` key.
+      auto-index-creation: true
+  servlet:
+    multipart:
+      # Document scans from a checkpoint camera routinely exceed the 1MB default.
+      max-file-size: 20MB
+      max-request-size: 40MB
+  jackson:
+    # Null fields are omitted so the console can distinguish "not present on the document"
+    # from "read as empty". Jackson 3 already writes dates as ISO-8601 by default.
+    default-property-inclusion: non_null
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  api-docs:
+    # Machine-readable document. The Swagger UI page reads this same path.
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    display-request-duration: true
+    # Collapsed on open: an officer console API is browsed by area, not read top to bottom.
+    doc-expansion: none
+  # Actuator is an operations surface, not part of the officer API contract.
+  show-actuator: false
+  default-produces-media-type: application/json
+
+screening:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+  risk:
+    # Score at or above which the recommendation becomes REJECT.
+    reject-threshold: 70
+    # Score at or above which the case is referred to an officer.
+    review-threshold: 35
+
+  ocr:
+    claude:
+      # Vision OCR. Inactive unless an Anthropic credential is present in the environment.
+      enabled: true
+      effort: medium
+    tesseract:
+      binary: ${TESSERACT_BINARY:tesseract}
+      languages: eng
+      timeout-seconds: 30
+
+  face:
+    # Point at a biometric matching service to activate Module 4. Empty means the module
+    # reports that it did not run; no similarity score is ever estimated without a matcher.
+    service-url: ${FACE_SERVICE_URL:}
+    timeout-seconds: 15
+    match-threshold: 0.75
+    mismatch-threshold: 0.55
+    local:
+      # Local face verification using OpenCV SFace. Active when true and models are present.
+      enabled: true
+    models:
+      dir: ${FACE_MODELS_DIR:${java.io.tmpdir}/govtid-face-models}
+      detector-caffemodel: opencv_face_detector.caffemodel
+      detector-prototxt: opencv_face_detector.prototxt
+      recognizer-onnx: face_recognizer_fast.onnx
+
+  watchlist:
+    # Presentations of one document within 24 hours before velocity is flagged.
+    velocity-threshold: 3
+
+logging:
+  level:
+    com.govid.screening: INFO

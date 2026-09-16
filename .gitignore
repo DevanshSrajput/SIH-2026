@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Face models (downloaded at runtime, not committed)
+.cache/
+
+# Java / Maven
+**/target/
+*.class
+*.jar
+*.war
+
+# Node
+**/node_modules/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Environment variables
+.env
+.env.local
+
+# Data / datasets
+dataset/
+*.crdownload
+
+# MongoDB
+data/db/
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.bak

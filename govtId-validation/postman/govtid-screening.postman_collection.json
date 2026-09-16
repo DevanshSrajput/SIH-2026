@@ -1,0 +1,398 @@
+{
+  "info": {
+    "_postman_id": "b1f4a0c2-5d3e-4a71-9c8b-0f2e6a7d1c40",
+    "name": "GovtID Screening API",
+    "description": "AI-Based Fake Identity & Document Screening System.\n\nAll endpoints are served by the Spring Boot backend (default http://localhost:8080).\n\nStart the API with:\n  cd backend && ./mvnw spring-boot:run -Pembedded-mongo\n\nCollection variables:\n- baseUrl          API root, default http://localhost:8080\n- caseReference    auto-populated by \"Screen a document\" and \"List cases\"\n- watchlistEntryId auto-populated by \"Add watchlist entry\" and \"List watchlist\"\n- officerId        officer identifier sent on decisions and watchlist writes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "caseReference", "value": "", "type": "string" },
+    { "key": "watchlistEntryId", "value": "", "type": "string" },
+    { "key": "officerId", "value": "OFFICER-01", "type": "string" },
+    { "key": "checkpointId", "value": "CHK-NORTH", "type": "string" },
+    { "key": "laneId", "value": "LANE-3", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Screening",
+      "description": "Module 1-4 pipeline plus case retrieval, evidence images and officer decisions.",
+      "item": [
+        {
+          "name": "Screen a document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.caseReference) {",
+                  "        pm.collectionVariables.set('caseReference', body.caseReference);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": [],
+                  "description": "REQUIRED. Scan or photo of the presented document (JPEG/PNG). Max 20MB."
+                },
+                {
+                  "key": "live",
+                  "type": "file",
+                  "src": [],
+                  "disabled": true,
+                  "description": "Optional. Live capture of the traveller. Enables Module 4 face verification (only runs when screening.face.service-url is configured)."
+                },
+                {
+                  "key": "documentType",
+                  "value": "PASSPORT",
+                  "type": "text",
+                  "description": "PASSPORT | VISA | NATIONAL_ID | DRIVING_LICENCE | PERMIT | TRAVEL_AUTHORIZATION | UNKNOWN. Defaults to UNKNOWN."
+                },
+                {
+                  "key": "checkpointId",
+                  "value": "{{checkpointId}}",
+                  "type": "text",
+                  "description": "Optional."
+                },
+                {
+                  "key": "laneId",
+                  "value": "{{laneId}}",
+                  "type": "text",
+                  "description": "Optional."
+                },
+                {
+                  "key": "officerId",
+                  "value": "{{officerId}}",
+                  "type": "text",
+                  "description": "Optional."
+                },
+                {
+                  "key": "text",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true,
+                  "description": "Optional. Text the caller already holds, e.g. an e-passport chip read (raw MRZ). Trusted over pixel OCR when present."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings"]
+            },
+            "description": "Runs the full pipeline: OCR -> validation -> tampering -> face -> watchlist -> risk engine.\n\nReturns the complete ScreeningCase including the RiskAssessment (score, band, verdict) and every RiskFlag with its evidence map.\n\nSelect a local image file for the `document` part before sending - Postman does not persist file paths in exported collections."
+          },
+          "response": []
+        },
+        {
+          "name": "List cases",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.content && body.content.length > 0) {",
+                  "        pm.collectionVariables.set('caseReference', body.content[0].caseReference);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings?page=0&size=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings"],
+              "query": [
+                { "key": "page", "value": "0", "description": "Zero-based page index. Default 0." },
+                { "key": "size", "value": "25", "description": "Page size. Default 25, capped at 100." }
+              ]
+            },
+            "description": "Paged case list, newest first. Returns lightweight CaseSummary rows, not full cases."
+          },
+          "response": []
+        },
+        {
+          "name": "Get case",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings/{{caseReference}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings", "{{caseReference}}"]
+            },
+            "description": "Full case by case reference, or by raw Mongo id. Returns 400 with an error body if unknown."
+          },
+          "response": []
+        },
+        {
+          "name": "Get case audit trail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/audit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings", "{{caseReference}}", "audit"]
+            },
+            "description": "Audit events for the case in chronological order."
+          },
+          "response": []
+        },
+        {
+          "name": "Get document image",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/images/document",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings", "{{caseReference}}", "images", "document"]
+            },
+            "description": "Stored document evidence image from GridFS. 404 if none was stored."
+          },
+          "response": []
+        },
+        {
+          "name": "Get live capture image",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/images/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings", "{{caseReference}}", "images", "live"]
+            },
+            "description": "Stored live-capture evidence image. 404 if the screening had no live capture. Any kind other than `document` or `live` returns 400."
+          },
+          "response": []
+        },
+        {
+          "name": "Record officer decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"decision\": \"REVIEW\",\n  \"officerId\": \"{{officerId}}\",\n  \"notes\": \"Referred to secondary inspection; MRZ check digit mismatch on document number.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "screenings", "{{caseReference}}", "decision"]
+            },
+            "description": "Records the officer determination alongside the system recommendation.\n\ndecision (required): CLEAR | REVIEW | REJECT\nofficerId: max 120 chars\nnotes: max 2000 chars"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Watchlist",
+      "description": "Blacklist of stolen, revoked and flagged documents and identities.",
+      "item": [
+        {
+          "name": "List watchlist",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.content && body.content.length > 0) {",
+                  "        pm.collectionVariables.set('watchlistEntryId', body.content[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist?page=0&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "watchlist"],
+              "query": [
+                { "key": "page", "value": "0", "description": "Zero-based page index. Default 0." },
+                { "key": "size", "value": "50", "description": "Page size. Default 50, capped at 200." }
+              ]
+            },
+            "description": "Paged watchlist entries, most recently added first."
+          },
+          "response": []
+        },
+        {
+          "name": "Add watchlist entry - document number",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.id) {",
+                  "        pm.collectionVariables.set('watchlistEntryId', body.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"documentNumber\": \"X1234567\",\n  \"surname\": \"MUELLER\",\n  \"givenNames\": \"ANNA MARIA\",\n  \"dateOfBirth\": \"1988-04-17\",\n  \"nationality\": \"DEU\",\n  \"listType\": \"STOLEN_DOCUMENT\",\n  \"severity\": \"CRITICAL\",\n  \"reason\": \"Reported stolen by the issuing authority on 2026-07-02.\",\n  \"source\": \"INTERPOL SLTD\",\n  \"addedBy\": \"{{officerId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "watchlist"]
+            },
+            "description": "Creates a watchlist entry.\n\nRequires either a documentNumber, or a surname together with a dateOfBirth - a name alone is too common to match on safely; anything else returns 400.\n\nlistType (required): STOLEN_DOCUMENT | REVOKED_DOCUMENT | ENTRY_BAN | WANTED | VISA_OVERSTAY | LOCAL_INTEREST\nseverity: INFO | LOW | MEDIUM | HIGH | CRITICAL (defaults to CRITICAL)\n\nField limits: documentNumber 40, surname/givenNames 80, nationality 3 (ISO-3166 alpha-3), reason 500, source/addedBy 120."
+          },
+          "response": []
+        },
+        {
+          "name": "Add watchlist entry - identity only",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"surname\": \"OKONKWO\",\n  \"givenNames\": \"DANIEL\",\n  \"dateOfBirth\": \"1979-11-30\",\n  \"nationality\": \"NGA\",\n  \"listType\": \"ENTRY_BAN\",\n  \"severity\": \"HIGH\",\n  \"reason\": \"Entry ban in force until 2028-01-01.\",\n  \"source\": \"NATIONAL IMMIGRATION\",\n  \"addedBy\": \"{{officerId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "watchlist"]
+            },
+            "description": "Name-and-date-of-birth entry, matched on the normalised identity key rather than a document number."
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate watchlist entry",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist/{{watchlistEntryId}}?actor={{officerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "watchlist", "{{watchlistEntryId}}"],
+              "query": [
+                { "key": "actor", "value": "{{officerId}}", "description": "Optional. Recorded on the audit event." }
+              ]
+            },
+            "description": "Deactivates rather than deletes: a watchlist is evidence, and removing the row would erase the reason any past case was rejected. Returns the updated entry with active=false."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Statistics",
+      "item": [
+        {
+          "name": "Checkpoint stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stats?windowHours=24",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stats"],
+              "query": [
+                { "key": "windowHours", "value": "24", "description": "Rolling window in hours. Default 24, floored at 1." }
+              ]
+            },
+            "description": "Shift-level view: throughput, referral rate, median and slowest processing time, breakdown by verdict and document type, top 10 flag codes, and the five highest-risk cases in the window."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Actuator",
+      "description": "Spring Boot management endpoints. Only health, info and metrics are exposed.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Liveness check. Details are shown only when authorized."
+          },
+          "response": []
+        },
+        {
+          "name": "Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "info"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics"]
+            },
+            "description": "Lists available metric names. Append a name, e.g. /actuator/metrics/http.server.requests, for a single metric."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

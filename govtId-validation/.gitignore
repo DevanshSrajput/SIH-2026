@@ -1,0 +1,29 @@
+# Java / Maven
+backend/target/
+*.class
+
+# Node
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides — may carry credentials or checkpoint-specific configuration
+backend/src/main/resources/application-local.yml
+.env
+.env.local
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log

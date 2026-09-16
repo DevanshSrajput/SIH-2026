@@ -1,0 +1,15 @@
+# Face Verification Service dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Face detection and recognition
+insightface>=0.7.3
+onnxruntime>=1.16.0
+
+# Image processing
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+
+# Utilities
+Pillow>=10.0.0

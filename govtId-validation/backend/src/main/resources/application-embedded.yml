@@ -1,0 +1,17 @@
+# Local development without any MongoDB infrastructure.
+# Activated by the `embedded-mongo` Maven profile; the database is in-process and its
+# contents are discarded when the process exits.
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 7.0.14
+
+spring:
+  mongodb:
+    database: govtid_screening_dev
+
+logging:
+  level:
+    org.mongodb.driver: WARN
+    de.flapdoodle: WARN
