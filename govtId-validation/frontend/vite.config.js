@@ -12,6 +12,15 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // The live capture-quality hint calls the face service on every frame while the
+      // officer lines the traveller up. Routing that preview loop through the screening
+      // API - which would also run OCR and forensics - would be wasteful, so it goes
+      // direct, still through this proxy so the browser sees a single origin.
+      '/face-service': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/face-service/, ''),
+      },
     },
   },
 })

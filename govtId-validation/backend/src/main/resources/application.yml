@@ -64,29 +64,63 @@ screening:
       enabled: true
       effort: medium
     tesseract:
+      # Tried first; if it does not answer, the standard install locations for this
+      # platform are probed automatically, so no PATH editing is needed.
       binary: ${TESSERACT_BINARY:tesseract}
       languages: eng
       timeout-seconds: 30
 
   face:
-    # Point at a biometric matching service to activate Module 4. Empty means the module
-    # reports that it did not run; no similarity score is ever estimated without a matcher.
+    # Point at the face verification service to activate Module 4. No similarity score is
+    # ever estimated without a matcher.
+    #
+    # Empty by default on purpose. An unset URL makes Module 4 report SKIPPED - it did not
+    # run - whereas a default pointing at a service that happens to be down would make it
+    # report FAILED, and RiskEngine refuses to return CLEAR on a failed module. Every
+    # screening on a machine without the face service would then be referred for review.
+    # start.ps1 and docker-compose set FACE_SERVICE_URL when they bring the service up.
     service-url: ${FACE_SERVICE_URL:}
     timeout-seconds: 15
-    match-threshold: 0.75
-    mismatch-threshold: 0.55
-    local:
-      # Local face verification using OpenCV SFace. Active when true and models are present.
-      enabled: true
-    models:
-      dir: ${FACE_MODELS_DIR:${java.io.tmpdir}/govtid-face-models}
-      detector-caffemodel: opencv_face_detector.caffemodel
-      detector-prototxt: opencv_face_detector.prototxt
-      recognizer-onnx: face_recognizer_fast.onnx
+
+    # ------------------------------------------------------------------
+    # Thresholds are RAW COSINE similarities between SFace embeddings, not rescaled
+    # percentages. SFace's own published break-even point is 0.363; the match threshold
+    # sits deliberately above it.
+    #
+    # A false accept at a checkpoint waves an impostor through on someone else's
+    # passport. A false referral costs an officer a few seconds. The two errors are not
+    # symmetric and these numbers are not set as though they were.
+    #
+    # Verify them against your own cameras and scanners before going live:
+    #   python face-verification-service/calibrate.py <samples-dir>
+    # ------------------------------------------------------------------
+    match-threshold: ${FACE_MATCH_THRESHOLD:0.46}
+    mismatch-threshold: ${FACE_MISMATCH_THRESHOLD:0.28}
+    # A score this close to either threshold is reported inconclusive even when it falls
+    # on the decisive side: the thresholds are estimates from a finite sample, not
+    # physical constants.
+    uncertain-margin: 0.03
+
+    # 1:N identification is stricter than 1:1 verification. Every extra enrolled subject
+    # is another chance for a coincidental high score, and the top candidate must also
+    # beat the best-scoring different person by `identify-margin` to be named.
+    identify-threshold: ${FACE_IDENTIFY_THRESHOLD:0.52}
+    identify-margin: 0.06
 
   watchlist:
     # Presentations of one document within 24 hours before velocity is flagged.
     velocity-threshold: 3
+
+  rate-limit:
+    # Caps expensive write requests per client. Reads are never limited - throttling an
+    # officer's console mid-shift is worse than the flood it would prevent.
+    #
+    # The counter is in-memory and therefore per-instance: behind a load balancer the
+    # effective limit multiplies by the instance count. Turn this off and use a shared
+    # counter if you run more than one node.
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    requests-per-minute: ${RATE_LIMIT_RPM:60}
+    window-seconds: 60
 
 logging:
   level:

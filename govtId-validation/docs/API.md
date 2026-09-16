@@ -211,18 +211,97 @@ number a supervisor uses to judge whether lanes are keeping up.
 | `screening.ocr.claude.effort` | `medium` | Reasoning effort for vision OCR |
 | `TESSERACT_BINARY` | `tesseract` | Classical OCR binary |
 | `FACE_SERVICE_URL` | *(empty)* | Biometric matcher; empty disables Module 4 |
-| `screening.face.match-threshold` | `0.75` | At or above, faces accepted |
-| `screening.face.mismatch-threshold` | `0.55` | Below, treated as different people |
+| `screening.face.match-threshold` | `0.46` | Raw cosine at or above which faces match |
+| `screening.face.mismatch-threshold` | `0.28` | Raw cosine below which they are different people |
+| `screening.face.uncertain-margin` | `0.03` | Band around each threshold reported inconclusive |
+| `screening.face.identify-threshold` | `0.52` | 1:N identification threshold |
+| `screening.face.identify-margin` | `0.06` | Margin the top candidate must beat the runner-up by |
+| `screening.rate-limit.requests-per-minute` | `60` | Per-client cap on write requests |
 | `screening.watchlist.velocity-threshold` | `3` | Presentations in 24 h before velocity is flagged |
+
+### Face thresholds are raw cosine, not percentages
+
+`similarity` is the **raw cosine** between two SFace embeddings. It is not a rescaled
+confidence and must not be read as one.
+
+| Population | Typical raw cosine |
+|---|---|
+| Two different people | 0.00 – 0.25 |
+| Same person, document scan vs live capture | 0.40 – 0.75 |
+
+SFace's published break-even is 0.363; `match-threshold` sits deliberately above it,
+because a false accept and a false referral do not cost the same thing at a checkpoint.
+
+Calibrate against real captures before relying on these values:
+
+```bash
+python face-verification-service/calibrate.py samples/
+```
 
 ### Face service contract
 
 Module 4 expects `POST {service-url}/compare` accepting multipart parts `document` and
-`live`, replying:
+`live`. A minimal reply is:
 
 ```json
-{ "similarity": 0.91, "documentFaceFound": true, "liveFaceFound": true }
+{ "similarity": 0.58, "documentFaceFound": true, "liveFaceFound": true }
+```
+
+A service that has assessed image quality and liveness itself returns the richer shape,
+and its `decision` is passed straight through — the matcher saw the pixels and the
+screening service did not:
+
+```json
+{
+  "similarity": 0.58,
+  "decision": "MATCH",
+  "confidence": 0.71,
+  "summary": "The traveller matches the portrait on the document (similarity 0.58).",
+  "reasons": ["Similarity 0.580 is at or above the 0.46 match threshold."],
+  "blockers": [],
+  "recaptureAdvice": null,
+  "documentFaceFound": true,
+  "liveFaceFound": true,
+  "livenessScore": 0.87,
+  "livenessLive": true,
+  "quality": { "document": { "usable": true }, "live": { "usable": true } }
+}
 ```
 
 A missing `similarity` scores as 0.0 — the absence of a measurement is never read as a
-perfect match.
+perfect match. An unrecognised `decision` is treated as absent rather than guessed at, so
+a service speaking a dialect we do not understand cannot assert a match by accident.
+
+`FaceVerificationService` will only ever move a decision *toward* uncertainty. Nothing
+downstream can upgrade an UNCERTAIN to a MATCH.
+
+### Face authentication endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/face` | 1:1 verification — parts `document` and `live` |
+| `POST` | `/api/face/enrolments` | Register a reference face for a known traveller |
+| `GET` | `/api/face/enrolments` | List enrolments, newest first |
+| `DELETE` | `/api/face/enrolments/{id}` | Withdraw an enrolment (never deleted) |
+| `POST` | `/api/face/identify` | 1:N identification against the enrolled gallery |
+
+### Watchlist management endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `PUT` | `/api/watchlist/{id}` | Update an entry; lookup keys are rebuilt |
+| `POST` | `/api/watchlist/{id}/reactivate` | Restore a withdrawn entry |
+| `POST` | `/api/watchlist/import` | Bulk import; bad rows are reported, not fatal |
+| `GET` | `/api/watchlist/export` | Every entry as JSON; round-trips through import |
+
+### Paged responses
+
+Paged endpoints return a `PagedModel` envelope — `content` plus a `page` object carrying
+`size`, `number`, `totalElements` and `totalPages`.
+
+### Rate limiting
+
+Write requests to `/api/**` are capped per client. Reads are never limited — throttling an
+officer's console mid-shift is a worse failure than the flood it would prevent. Responses
+carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; exceeding the
+cap returns `429` with an `ApiError` body.

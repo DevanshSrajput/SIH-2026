@@ -4,6 +4,8 @@ import { getAudit, getCase, imageUrl, recordDecision } from '../api.js'
 import VerdictBanner from '../components/VerdictBanner.jsx'
 import FindingList from '../components/FindingList.jsx'
 import Badge from '../components/Badge.jsx'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import ModuleBreakdown from '../components/ModuleBreakdown.jsx'
 import ModuleTimeline from '../components/ModuleTimeline.jsx'
 
 const VISA_FIELDS = [
@@ -27,13 +29,13 @@ export default function CaseDetailPage() {
   const [screening, setScreening] = useState(null)
   const [audit, setAudit] = useState([])
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
   const [notes, setNotes] = useState('')
   const [officerId, setOfficerId] = useState('')
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
-    setLoading(true)
+    setFetching(true)
     setError(null)
     try {
       const [caseData, auditData] = await Promise.all([
@@ -47,9 +49,11 @@ export default function CaseDetailPage() {
     } catch (e) {
       setError(e.message)
     } finally {
-      setLoading(false)
+      setFetching(false)
     }
   }, [reference])
+
+  const loading = screening === null && fetching
 
   useEffect(() => {
     load()
@@ -162,6 +166,17 @@ export default function CaseDetailPage() {
           <div className="panel">
             <h2>What ran</h2>
             <ModuleTimeline results={screening.moduleResults} />
+          </div>
+
+          <div className="panel">
+            <h2>Module breakdown</h2>
+            <p className="panel-note">
+              What each module measured, and the evidence behind every finding. This is the
+              record a decision has to be defensible against later.
+            </p>
+            <ErrorBoundary title="The module breakdown could not be displayed">
+              <ModuleBreakdown results={screening.moduleResults} />
+            </ErrorBoundary>
           </div>
 
           <div className="panel">

@@ -2,13 +2,25 @@
 __pycache__/
 *.pyc
 *.pyo
-.venv/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
 
-# Face models (downloaded at runtime, not committed)
-.cache/
+# Virtual environment
+venv/
+.venv/
+
+# Face models (large files, fetched by download_models.py or baked into the image).
+# The directory itself is kept, via .gitkeep, because the Docker build copies it.
+face-verification-service/models/*.onnx
+face-verification-service/models/*.caffemodel
+face-verification-service/models/*.prototxt
+!face-verification-service/models/.gitkeep
+
+# The standalone enrolment gallery holds face embeddings - biometric data about
+# identifiable people. It never belongs in version control.
+face-verification-service/data/
 
 # Java / Maven
 **/target/
@@ -47,3 +59,9 @@ data/db/
 # Temp files
 *.tmp
 *.bak
+
+# Training outputs
+checkpoints/
+outputs/
+wandb/
+runs/

@@ -7,11 +7,11 @@ export default function CasesPage() {
   const [page, setPage] = useState(0)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    setFetching(true)
     listCases(page, 25)
       .then((result) => {
         if (!cancelled) {
@@ -20,11 +20,13 @@ export default function CasesPage() {
         }
       })
       .catch((e) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && setFetching(false))
     return () => {
       cancelled = true
     }
   }, [page])
+
+  const loading = data === null && fetching
 
   return (
     <>

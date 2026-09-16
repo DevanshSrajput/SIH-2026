@@ -22,6 +22,8 @@ export default function FileDrop({ id, file, onChange, label, hint, accept = 'im
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef(null)
 
+  const urlRef = useRef(null)
+
   useEffect(() => {
     if (!file) {
       setPreview(null)
@@ -29,14 +31,22 @@ export default function FileDrop({ id, file, onChange, label, hint, accept = 'im
       return undefined
     }
     const url = URL.createObjectURL(file)
+    urlRef.current = url
     setPreview(url)
 
     const probe = new Image()
-    probe.onload = () => setDimensions({ width: probe.naturalWidth, height: probe.naturalHeight })
-    probe.onerror = () => setDimensions(null)
+    probe.onload = () => {
+      if (urlRef.current === url) setDimensions({ width: probe.naturalWidth, height: probe.naturalHeight })
+    }
+    probe.onerror = () => {
+      if (urlRef.current === url) setDimensions(null)
+    }
     probe.src = url
 
-    return () => URL.revokeObjectURL(url)
+    return () => {
+      URL.revokeObjectURL(url)
+      urlRef.current = null
+    }
   }, [file])
 
   const accepted = useCallback(

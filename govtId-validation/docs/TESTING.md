@@ -11,21 +11,53 @@ detector that stops firing, a threshold that drifts, a normalisation that starts
 valid names. None of them throw. They just quietly change what the system concludes about
 people.
 
-## Current suite — 59 tests
+## Current suite — 88 backend tests, 58 face service tests
 
 ```bash
-cd backend && ./mvnw test
+cd backend && ./mvnw test                      # 88
+cd face-verification-service && pytest -q      # 58
 ```
+
+### Backend — `backend/src/test`
 
 | Suite | Tests | Guards |
 |---|---|---|
+| `FaceVerificationServiceTest` | 18 | The three-way decision, and every route that could produce a false positive |
 | `DocumentValidationServiceTest` | 16 | Every Module 2 rule, against a fixed clock |
 | `RiskEngineTest` | 10 | The scoring model's mathematical properties |
 | `MrzParserTest` | 10 | ICAO 9303 parsing and check-digit arithmetic |
 | `ScreeningPipelineIntegrationTest` | 9 | The whole pipeline, end to end, against a real database |
 | `TamperingServiceTest` | 6 | Corroboration counting and detector isolation |
+| `OcrServiceTest` | 6 | Backend selection and priority ordering |
 | `IdentityKeysTest` | 5 | Key normalisation and ICAO transliteration |
+| `ClaudeVisionOcrEngineTest` | 5 | Vision OCR parsing and availability gating |
 | `CopyMoveDetectorTest` | 3 | The false-positive/false-negative boundary of the hardest detector |
+
+### Face service — `face-verification-service/tests`
+
+| Suite | Guards |
+|---|---|
+| `TestNoFalsePositives` | No combination of bad evidence yields a MATCH — swept across the whole score range |
+| `TestNoFalseAccusations` | A poor image is never turned into an impostor accusation either |
+| `TestDecisionBands` | Threshold bands, including the margin that makes a borderline score uncertain |
+| `TestQualityAssessor` | The quality gate, on synthetic images with known defects |
+| `TestYuNetRowLayout` | The detector's output indices — see below |
+| `TestUncertaintyIsExplained` | An uncertain result always carries reasons and advice |
+| `TestLivenessDetector` | Texture, size-ratio and aggregation heuristics |
+
+The central property is **one-sided**: the system may be wrong by being unsure, but it
+must not be wrong by being confident. Every path that could produce a MATCH on evidence
+that does not support one is asserted.
+
+> `TestYuNetRowLayout` exists because of a real bug. YuNet returns
+> `[x, y, w, h, 10 landmark coordinates, score]` — the score is the **last** element. The
+> code read index 4, which is the right eye's x-coordinate, and took landmarks from indices
+> 5–14, shifting every one by half a coordinate. Those shifted landmarks fed the alignment
+> step a face warped to the wrong canonical position, degrading every embedding and pulling
+> unrelated faces together.
+>
+> It threw nothing. It surfaced only as slightly worse scores. That is exactly the class of
+> defect this suite exists to catch, so the layout is now pinned.
 
 Integration tests run against an **embedded MongoDB**, so the suite needs no Docker daemon
 and no local `mongod`.

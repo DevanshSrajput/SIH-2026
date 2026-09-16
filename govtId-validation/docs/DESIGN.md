@@ -188,12 +188,25 @@ interface FaceVerifier {
 }
 ```
 
-**Two thresholds, not one.** Above `match-threshold` accepted, below `mismatch-threshold`
-treated as different people, between them referred rather than decided. Biometric comparison
-is probabilistic and a single cutoff would force a confident answer out of an ambiguous
-measurement.
+**Three answers, not two.** `FaceDecision` is MATCH, NO_MATCH or UNCERTAIN. Above
+`match-threshold` accepted, below `mismatch-threshold` treated as different people, between
+them referred rather than decided. Biometric comparison is probabilistic and a single
+cutoff would force a confident answer out of an ambiguous measurement.
 
-**There is deliberately no built-in matcher.** See §5.1.
+**The score is not the only thing that can make a comparison untrustworthy.** A blurred
+capture, a face turned away, a portrait photographed off a phone screen, two people in
+frame — each produces a number that looks exactly like a good measurement and is not one.
+So a positive identification additionally requires that both images clear the quality gate,
+that the capture passes the liveness check, that exactly one face is in the live frame, and
+that both crops were landmark-aligned. Failing any of those returns UNCERTAIN with the
+reason attached, however high the similarity is.
+
+`FaceVerificationService` only ever moves a decision *toward* uncertainty. A matcher that
+reports UNCERTAIN is never upgraded to a MATCH by a threshold comparison here.
+
+**Thresholds are raw cosine, never rescaled.** See §5.3.
+
+**There is deliberately no built-in matcher.** See §5.1 and §5.2.
 
 ### 3.7 `risk.RiskEngine`
 
@@ -258,7 +271,91 @@ decision about a person's liberty. The failure would be silent.
 not run. This also matches how biometrics are deployed in practice — an embedding model in
 its own container, on its own hardware and retraining schedule.
 
-### 5.2 The vision model reads; it does not judge
+### 5.2 The in-process OpenCV fallback was removed, not kept
+
+**Rejected:** keeping a local `LocalFaceVerifier` behind the HTTP delegate, so Module 4
+still produces a score when the face service is unreachable.
+
+**Why rejected:** its Caffe SSD detector reported a bounding box and no facial landmarks.
+SFace is trained on faces warped to a canonical 112×112 layout *using* those landmarks, so
+the fallback could only feed it a plain resized crop — and an unaligned crop shifts every
+embedding in a common direction, dragging unrelated faces together. It was a false-accept
+source, and by the rule in §3.6 it could never have been allowed to confirm an identity
+anyway.
+
+It additionally required 45 MB of models that were never shipped with the repository, and
+pulled in `opencv-platform` and `javacv-platform` — several hundred megabytes of native
+binaries, and the heaviest dependency in the build, used by nothing else. Module 3 uses
+`java.awt` and `ImageIO`.
+
+**Chosen:** one matcher. When the face service is unreachable, Module 4 reports FAILED,
+which is true, visible, and prevents a CLEAR verdict. A fallback that cannot answer the
+question is not a fallback — keeping it would have meant keeping something that *looked*
+like a safety net.
+
+### 5.3 Face similarity is a raw cosine, never rescaled onto a percentage
+
+**Rejected:** mapping the cosine similarity from [−1, 1] onto [0, 1] with
+`(cosine + 1) / 2`, so the console can show it as a friendly percentage.
+
+**Why rejected:** it destroys the separation between the two populations it is meant to
+distinguish. Raw cosine puts two different people around 0.00–0.25 and the same person
+around 0.40–0.75. After the rescaling those become 0.50–0.63 and 0.70–0.88 — the entire
+useful range compressed into roughly [0.45, 0.90], with two complete strangers reported as
+"55% similar".
+
+This was not hypothetical. It shipped, with thresholds of 0.75/0.55 sitting on the rescaled
+axis, which placed unrelated faces inside the review band and within reach of a match. It
+was a false-accept generator disguised as a friendlier number.
+
+**Chosen:** the raw cosine throughout, with thresholds calibrated against SFace's published
+0.363 break-even point. `match-threshold` defaults to 0.46, deliberately above it — the
+published figure balances false accepts against false rejects, and a checkpoint does not
+want them balanced. `calibrate.py` re-measures both distributions on the deployment's own
+captures and reports the false accept rate at the configured threshold.
+
+**Consequence:** `similarity` must never be rendered as a confidence percentage in any
+interface. The console shows it against its thresholds on a banded meter, with the decision
+stated in words, and reports `confidence` as a separate field — a high similarity with a
+low confidence is exactly the case an officer most needs to see.
+
+### 5.4 Image quality is a gate, not a confidence adjustment
+
+**Rejected:** scoring image quality and using it to scale the similarity, or to lower a
+reported confidence while still returning a verdict.
+
+**Why rejected:** a blurred or badly-lit face does not produce a *less certain* embedding.
+It produces a *wrong* one, and the error has no reliable direction — it can move a
+stranger's face closer to the subject's just as easily as further away. Lowering a
+confidence implies the answer is still roughly right; it is not.
+
+**Chosen:** a hard gate. Resolution, focus, exposure, contrast, head pose and detector
+confidence are measured before any identity claim, and **every check must pass**, not
+merely the weighted average. A face at mean luminance 32 is far too dark to identify anyone
+on, yet still averages well above any sensible aggregate bar once a generous resolution and
+sharpness score are folded in — it would sail through with its failed exposure check
+recorded and ignored.
+
+The gate is symmetric. An unusable pair does not produce a confident NO_MATCH either:
+telling an officer the traveller is an impostor on the strength of a dark, blurred
+photograph is its own kind of false positive.
+
+### 5.5 1:N identification is held to a stricter bar than 1:1 verification
+
+**Rejected:** reusing the verification threshold for identification against the enrolled
+gallery.
+
+**Why rejected:** verification makes one comparison; identification makes one per enrolled
+subject. Every additional subject is another chance for a coincidental high score, so a
+threshold calibrated for 1:1 will eventually name somebody in a large gallery.
+
+**Chosen:** a higher `identify-threshold` (0.52), plus a requirement that the top candidate
+beat the best-scoring *different* person by `identify-margin` (0.06). Several enrolments of
+the same traveller scoring alike is confirmation, not ambiguity, so the runner-up is only
+counted when it is a different subject. Two near-equal candidates return `AMBIGUOUS` rather
+than the higher one — that is a pair of lookalikes, not an identification.
+
+### 5.6 The vision model reads; it does not judge
 
 **Rejected:** asking the model "is this document genuine?", which it can answer plausibly.
 
@@ -270,7 +367,7 @@ correct, complete or normalise a value — a wrong-looking value is evidence and
 to validation unchanged. A model error then surfaces downstream as a failed check digit: a
 visible, explainable finding rather than a silently wrong verdict.
 
-### 5.3 Multiplicative risk rather than additive points
+### 5.7 Multiplicative risk rather than additive points
 
 **Rejected:** summing severity points with a cap.
 
@@ -280,7 +377,7 @@ makes every threshold change reverberate unpredictably through unrelated cases.
 
 **Chosen:** probabilistic combination, which saturates by construction.
 
-### 5.4 Copy-move at native resolution
+### 5.8 Copy-move at native resolution
 
 **Rejected:** analysing a downscaled image for speed (the obvious optimisation, and what the
 first implementation did).
@@ -294,7 +391,7 @@ obvious paste.
 blur before matching to absorb JPEG grid-phase differences. Cost is ~0.4 s, which the budget
 absorbs.
 
-### 5.5 Oversubscribed signature buckets are dropped, not truncated
+### 5.9 Oversubscribed signature buckets are dropped, not truncated
 
 **Rejected:** capping bucket size to bound the pair enumeration.
 
@@ -305,7 +402,7 @@ The bug was invisible — the detector simply never fired.
 **Chosen:** a signature shared by more than a handful of blocks is repeated printing and is
 discarded entirely.
 
-### 5.6 Every well-supported shift is examined
+### 5.10 Every well-supported shift is examined
 
 **Rejected:** taking only the highest-voted displacement vector.
 
@@ -314,11 +411,11 @@ printing repeats across the whole page while a forged stamp covers a small part 
 Judging only the top shift lets heavy security printing mask an actual forgery — precisely
 on the documents this must work for.
 
-### 5.7 Watchlist entries are deactivated, never deleted
+### 5.11 Watchlist entries are deactivated, never deleted
 
 A watchlist is evidence. Deleting a row erases the reason a past case was rejected.
 
-### 5.8 Modules run sequentially
+### 5.12 Modules run sequentially
 
 **Deferred, not rejected.** Modules 2–4 are independent given Module 1's output and could
 run concurrently, cutting the ~0.5 s figure substantially. The risk engine is

@@ -126,10 +126,21 @@ kept, because a divergence between them is exactly what a later review needs to 
 
 | Code | Severity | Raised when |
 |---|---|---|
-| `FACE_MISMATCH` | CRITICAL | Similarity below the mismatch threshold (default 0.55) |
+| `FACE_MISMATCH` | CRITICAL | The matcher returned NO_MATCH — similarity below the mismatch threshold (default 0.28, raw cosine) |
 | `FACE_NOT_FOUND_ON_DOCUMENT` | HIGH | No portrait located on the document image |
-| `FACE_INCONCLUSIVE` | MEDIUM | Similarity between the two thresholds |
+| `FACE_LIVENESS_SUSPECT` | HIGH | The live capture failed the anti-spoofing check — possibly a printed photo or a phone screen |
+| `FACE_INCONCLUSIVE` | MEDIUM | The matcher returned UNCERTAIN — an ambiguous score, or evidence that the score cannot be trusted |
 | `FACE_NOT_FOUND_IN_CAPTURE` | MEDIUM | No face located in the live capture |
+| `FACE_QUALITY_INSUFFICIENT` | LOW | An image was too blurred, dark or small to compare reliably |
+
+A positive identification requires a decisive score **and** two usable images **and**
+a passed liveness check **and** one face in the live frame **and** landmark-aligned
+crops. Failing any of those raises `FACE_INCONCLUSIVE` however high the similarity is —
+a score that cannot be trusted is not evidence of a match.
+
+Quality and liveness are flagged in their own right rather than folded into the
+similarity verdict: *the capture was a photograph of a screen* is an intelligence
+signal about the presentation, separate from whether the two faces resemble each other.
 
 ## Watchlist and identity screening
 

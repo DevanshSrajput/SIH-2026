@@ -27,22 +27,39 @@ profile is the working default here:
 cd backend && ./mvnw spring-boot:run -Pembedded-mongo
 ```
 
-With MongoDB available, use Docker and the plain run instead:
+With MongoDB available, use Docker and the plain run instead. The compose file is at the
+**repository root**, one level above this directory:
 
 ```bash
-docker compose up -d mongo
+cd .. && docker compose up -d mongo
+```
+
+The whole stack in containers, including the face service:
+
+```bash
+cd .. && docker compose up --build
 ```
 
 Tests:
 
 ```bash
-cd backend && ./mvnw test
+cd backend && ./mvnw test                            # 88
+cd ../../face-verification-service && pytest -q      # 58
 ```
 
 Frontend:
 
 ```bash
 cd frontend && npm run dev
+```
+
+Face service (Module 4; without it Module 4 reports SKIPPED):
+
+```bash
+cd ../face-verification-service
+python download_models.py    # first run only, ~40MB
+python app.py
+export FACE_SERVICE_URL=http://localhost:5000
 ```
 
 ## Architecture
@@ -63,7 +80,7 @@ upload → Module 1 OCR → Module 2 Validation → Module 3 Tampering
 | `ocr` | Module 1. `OcrEngine` backends + `MrzParser` (ICAO 9303 TD1/TD2/TD3/MRV) |
 | `validation` | Module 2. Check digits, chronology, country codes, visa terms |
 | `tampering` | Module 3. `TamperingDetector` implementations (ELA, metadata, noise, copy-move) |
-| `face` | Module 4. `FaceVerifier` contract + HTTP delegate |
+| `face` | Module 4. `FaceVerifier` contract, HTTP delegate, enrolment and 1:N identification |
 | `watchlist` | Blacklist hits, multiple-identity and document-reuse detection |
 | `risk` | Score aggregation and verdict |
 | `support` | `IdentityKeys`, `NameNormaliser` — key normalisation |
@@ -104,6 +121,21 @@ each one is there because it was needed.
 (`Ü`→`UE`, `ß`→`SS`); stripping diacritics alone would raise a forgery finding against
 every traveller with a non-English name.
 
+**Face comparison has three answers, not two.** `FaceDecision` is MATCH / NO_MATCH /
+UNCERTAIN. A positive identification needs a decisive score *and* two usable images *and*
+a passed liveness check *and* one face in frame *and* landmark-aligned crops. Anything
+else is UNCERTAIN with `blockers` saying why. Nothing in the pipeline may upgrade an
+UNCERTAIN to a MATCH — `FaceVerificationService` deliberately only ever moves a decision
+*toward* uncertainty.
+
+**Face thresholds are raw cosine, never rescaled.** Two different people score 0.00-0.25;
+the same person across a scan and a live capture scores 0.40-0.75. SFace's published
+break-even is 0.363 and `match-threshold` sits above it at 0.46. Never map the cosine
+onto [0, 1] to make it look like a percentage — doing that compresses the two populations
+together and was the original false-accept bug. Re-calibrate with
+`face-verification-service/calibrate.py` against real captures before trusting any number
+here.
+
 ## Environment gotchas
 
 - **Spring Boot 4 uses Jackson 3** (`tools.jackson`). There is no `com.fasterxml`
@@ -114,6 +146,15 @@ every traveller with a non-English name.
   a broken main config can still pass tests. Verify config changes by starting the app.
 - **The Bash tool needs Windows-style paths for curl `@file` arguments** (`C:/Users/...`,
   not `/c/Users/...`).
+- **YuNet's detection row is `[x, y, w, h, 10 landmark coords, score]`** — the score is
+  the *last* element, not index 4. Reading index 4 takes the right eye's x-coordinate
+  (scores come back as 233 instead of 0.71) and shifts every landmark by one slot, which
+  feeds `alignCrop` a face warped to the wrong canonical position. That silently degrades
+  every embedding. Pinned by `TestYuNetRowLayout`.
+- **SFace takes raw BGR with no mean subtraction.** It is not a Caffe classifier. Passing
+  the face *detector's* mean (104, 177, 123) shifts every embedding by a constant.
+- **JDK 27 is installed at `C:\Program Files\Java\jdk-27`** but `JAVA_HOME` is not set,
+  so `./mvnw` fails until you export it.
 
 ## Optional integrations
 
@@ -122,5 +163,13 @@ All off by default; the system runs end-to-end without any of them.
 - **Claude vision OCR** (`ClaudeVisionOcrEngine`) — activates when an Anthropic credential
   is present. Model `claude-opus-5` via the official `com.anthropic:anthropic-java` SDK.
 - **Face matching** (`HttpFaceVerifier`) — activates when `screening.face.service-url`
-  points at a service exposing `POST /compare`.
-- **Tesseract** (`TesseractOcrEngine`) — activates if the binary is on `PATH`.
+  points at a service exposing `POST /compare`. Left empty on purpose: an unset URL makes
+  Module 4 report SKIPPED, whereas a default pointing at a service that happens to be down
+  would make it FAILED, and `RiskEngine` refuses CLEAR on a failed module — every
+  screening on a machine without the face service would be referred. `start.ps1` sets
+  `FACE_SERVICE_URL` when it brings the service up.
+- **Face enrolment** (`FaceEmbeddingClient`) — 1:N identification against a MongoDB
+  registry of embeddings. Needs the same service URL; the model lives in the Python
+  service and the records live in Mongo.
+- **Tesseract** (`TesseractOcrEngine`) — tries the configured path first, then the
+  standard install locations for the platform. No `PATH` editing needed.

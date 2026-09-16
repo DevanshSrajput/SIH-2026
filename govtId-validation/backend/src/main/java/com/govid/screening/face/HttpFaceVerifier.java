@@ -3,6 +3,7 @@ package com.govid.screening.face;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -12,7 +13,9 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,11 +26,20 @@ import java.util.Map;
  * the screening API. Point {@code screening.face.service-url} at that service and Module 4
  * activates; leave it unset and Module 4 reports itself as not run.
  *
+ * <p>This is the only matcher. An in-process OpenCV fallback used to sit behind it, but
+ * its detector reported no facial landmarks, so it could never align a crop to SFace's
+ * canonical layout - and an unaligned crop shifts every embedding in a common direction,
+ * dragging unrelated faces together. A fallback that cannot confirm an identity is not a
+ * fallback; it was removed rather than left to look like one.
+ *
  * <p>The service is expected to accept a multipart POST at {@code /compare} with parts
- * {@code document} and {@code live}, and to reply with JSON:
- * <pre>{"similarity": 0.0-1.0, "documentFaceFound": bool, "liveFaceFound": bool}</pre>
+ * {@code document} and {@code live}, and to reply with JSON carrying at least
+ * {@code similarity}, {@code documentFaceFound} and {@code liveFaceFound}. A service that
+ * also returns {@code decision} (MATCH / NO_MATCH / UNCERTAIN) has assessed quality and
+ * liveness itself, and that verdict is passed straight through.
  */
 @Component
+@Order(10)
 public class HttpFaceVerifier implements FaceVerifier {
 
     private static final Logger log = LoggerFactory.getLogger(HttpFaceVerifier.class);
@@ -89,7 +101,13 @@ public class HttpFaceVerifier implements FaceVerifier {
                 asBoolean(response.get("documentFaceFound")),
                 asBoolean(response.get("liveFaceFound")),
                 name(),
-                details);
+                details,
+                asDecision(response.get("decision")),
+                asConfidence(response.get("confidence")),
+                asStrings(response.get("reasons")),
+                asStrings(response.get("blockers")),
+                asString(response.get("summary")),
+                asString(response.get("recaptureAdvice")));
     }
 
     private static double asDouble(Object value) {
@@ -99,6 +117,45 @@ public class HttpFaceVerifier implements FaceVerifier {
         // A matcher that did not return a usable score must not be read as a perfect
         // match; the absence of a measurement scores as no evidence of similarity.
         return 0.0;
+    }
+
+    private static double asConfidence(Object value) {
+        return value instanceof Number number ? number.doubleValue() : Double.NaN;
+    }
+
+    /**
+     * An unrecognised decision value is treated as absent rather than guessed at, so the
+     * screening service falls back to its own thresholds. A service speaking a dialect we
+     * do not understand must not be able to assert a match by accident.
+     */
+    private static FaceDecision asDecision(Object value) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return null;
+        }
+        try {
+            return FaceDecision.valueOf(text.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("Face service returned an unrecognised decision '{}'; "
+                    + "falling back to threshold comparison", text);
+            return null;
+        }
+    }
+
+    private static String asString(Object value) {
+        return value instanceof String text && !text.isBlank() ? text : null;
+    }
+
+    private static List<String> asStrings(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<String> strings = new ArrayList<>(list.size());
+        for (Object item : list) {
+            if (item != null) {
+                strings.add(String.valueOf(item));
+            }
+        }
+        return strings;
     }
 
     /**

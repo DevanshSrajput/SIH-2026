@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -105,6 +107,18 @@ public class StatsController {
         stats.put("byVerdict", byVerdict);
         stats.put("byDocumentType", byDocumentType);
         stats.put("topFlags", topFlags);
+        stats.put("series", series(recent, since, windowHours));
+        stats.put("bySeverity", recent.stream()
+                .filter(c -> c.getRisk() != null)
+                .flatMap(c -> c.getRisk().flags().stream())
+                .collect(Collectors.groupingBy(
+                        f -> f.severity().name(), Collectors.counting())));
+        stats.put("byModule", recent.stream()
+                .filter(c -> c.getRisk() != null)
+                .flatMap(c -> c.getRisk().flags().stream())
+                .collect(Collectors.groupingBy(
+                        f -> f.module().name(), Collectors.counting())));
+        stats.put("officerAgreement", officerAgreement(recent));
         stats.put("highestRiskCases", recent.stream()
                 .filter(c -> c.getRisk() != null)
                 .sorted(Comparator.comparingInt((ScreeningCase c) -> c.getRisk().score()).reversed())
@@ -116,5 +130,77 @@ public class StatsController {
                 .toList());
 
         return stats;
+    }
+
+    /**
+     * Screening volume over time, bucketed so the window always renders as a readable
+     * number of columns rather than one bar per hour over a week.
+     *
+     * <p>Empty buckets are emitted explicitly. A gap in the data and a period with no
+     * traffic look identical once the zeroes are dropped, and at a checkpoint those mean
+     * very different things - one is a quiet shift, the other is a lane that stopped
+     * reporting.
+     */
+    private List<Map<String, Object>> series(List<ScreeningCase> cases, Instant since,
+                                             int windowHours) {
+        int buckets = windowHours <= 2 ? 12 : windowHours <= 24 ? 12 : 14;
+        long bucketMinutes = Math.max(1, (long) windowHours * 60 / buckets);
+        Instant now = Instant.now(clock);
+
+        List<Map<String, Object>> series = new ArrayList<>(buckets);
+        for (int i = 0; i < buckets; i++) {
+            Instant start = since.plus(Duration.ofMinutes(bucketMinutes * i));
+            Instant end = start.plus(Duration.ofMinutes(bucketMinutes));
+            if (start.isAfter(now)) {
+                break;
+            }
+
+            List<ScreeningCase> inBucket = cases.stream()
+                    .filter(c -> c.getCreatedAt() != null)
+                    .filter(c -> !c.getCreatedAt().isBefore(start) && c.getCreatedAt().isBefore(end))
+                    .toList();
+
+            Map<String, Object> point = new LinkedHashMap<>();
+            point.put("from", start.truncatedTo(ChronoUnit.MINUTES));
+            point.put("to", end.truncatedTo(ChronoUnit.MINUTES));
+            point.put("total", inBucket.size());
+            point.put("clear", countVerdict(inBucket, com.govid.screening.domain.Verdict.CLEAR));
+            point.put("review", countVerdict(inBucket, com.govid.screening.domain.Verdict.REVIEW));
+            point.put("reject", countVerdict(inBucket, com.govid.screening.domain.Verdict.REJECT));
+            series.add(point);
+        }
+        return series;
+    }
+
+    private static long countVerdict(List<ScreeningCase> cases,
+                                     com.govid.screening.domain.Verdict verdict) {
+        return cases.stream()
+                .filter(c -> c.getRisk() != null && c.getRisk().verdict() == verdict)
+                .count();
+    }
+
+    /**
+     * How often officers agreed with the system's recommendation.
+     *
+     * <p>Reported because a persistent disagreement is a signal about the system, not the
+     * officer. A recommendation that is routinely overridden is one whose thresholds need
+     * re-examining, and without this number nobody finds that out.
+     */
+    private static Map<String, Object> officerAgreement(List<ScreeningCase> cases) {
+        List<ScreeningCase> decided = cases.stream()
+                .filter(c -> c.getOfficerDecision() != null && c.getRisk() != null)
+                .toList();
+
+        long agreed = decided.stream()
+                .filter(c -> c.getOfficerDecision() == c.getRisk().verdict())
+                .count();
+
+        Map<String, Object> agreement = new LinkedHashMap<>();
+        agreement.put("decided", decided.size());
+        agreement.put("agreed", agreed);
+        agreement.put("overridden", decided.size() - agreed);
+        agreement.put("rate", decided.isEmpty()
+                ? null : Math.round((double) agreed / decided.size() * 1000) / 1000.0);
+        return agreement;
     }
 }
