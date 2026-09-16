@@ -30,19 +30,38 @@ The console proxies `/api` to the backend, so the browser sees one origin.
 
 ### With a real MongoDB
 
+The compose file is at the repository root, one level above this directory.
+
 ```bash
+cd ..                            # repository root
 docker compose up -d mongo
 ```
 
 ```bash
-cd backend && ./mvnw spring-boot:run
+cd govtId-validation/backend && ./mvnw spring-boot:run
 ```
 
-Optional database browser (not for any shared environment — it is unauthenticated):
+Optional database browser (not for any shared environment — it is unauthenticated, and it
+can read every screening case):
 
 ```bash
 docker compose --profile tools up -d mongo-express
 ```
+
+### The whole stack in containers
+
+To run all four services — MongoDB, the face service, the API and the console — without
+installing Java, Python or Node:
+
+```bash
+cd ..                            # repository root
+docker compose up --build
+```
+
+The console is then on `http://localhost:5173`, proxying `/api` to the backend and
+`/face-service` to the face service, so the browser sees a single origin and no CORS
+preflight is involved. Face models are baked into the image at build time; nothing is
+downloaded at runtime.
 
 ### Building artefacts
 

@@ -22,8 +22,6 @@
     <metadata-extractor.version>2.21.0</metadata-extractor.version>
     <anthropic.version>2.58.0</anthropic.version>
     <flapdoodle.version>4.33.0</flapdoodle.version>
-    <javacv.version>1.5.11</javacv.version>
-    <opencv.version>4.10.0-1.5.11</opencv.version>
     <!--
       springdoc 3.x is the Spring Boot 4 / Jackson 3 line. The 2.x line targets Boot 3 and
       will not start here.
@@ -81,65 +79,6 @@
       <groupId>com.anthropic</groupId>
       <artifactId>anthropic-java</artifactId>
       <version>${anthropic.version}</version>
-    </dependency>
-
-    <!-- OpenCV for face detection (DNN) and recognition (SFace embeddings). -->
-    <dependency>
-      <groupId>org.bytedeco</groupId>
-      <artifactId>opencv-platform</artifactId>
-      <version>${opencv.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.bytedeco</groupId>
-      <artifactId>javacv-platform</artifactId>
-      <version>${javacv.version}</version>
-      <exclusions>
-        <!-- Pull in only the OpenCV native binaries we need, not every module. -->
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>ffmpeg-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>flycapture-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>libdc1394-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>libfreenect-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>libfreenect2-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>librealsense-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>librealsense2-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>artoolkitplus-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>flandmark-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>leptonica-platform</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.bytedeco</groupId>
-          <artifactId>tesseract-platform</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <dependency>

@@ -1,0 +1,3 @@
+# Keeps this directory in the repository.
+# The model files themselves are gitignored - they are ~40MB and are fetched by
+# download_models.py, or baked into the Docker image at build time.

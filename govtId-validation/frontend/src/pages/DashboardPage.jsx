@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getStats } from '../api.js'
 import Badge from '../components/Badge.jsx'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import VolumeTrend from '../components/VolumeTrend.jsx'
 import { findingTitle } from '../findings.js'
 
 const WINDOWS = [
@@ -17,11 +19,11 @@ export default function DashboardPage() {
   const [windowHours, setWindowHours] = useState(24)
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    setFetching(true)
     getStats(windowHours)
       .then((result) => {
         if (!cancelled) {
@@ -30,11 +32,13 @@ export default function DashboardPage() {
         }
       })
       .catch((e) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && setFetching(false))
     return () => {
       cancelled = true
     }
   }, [windowHours])
+
+  const loading = stats === null && fetching
 
   const referralRate = Math.round((stats?.referralRate ?? 0) * 100)
 
@@ -76,7 +80,7 @@ export default function DashboardPage() {
 
       {!loading && stats && (
         <>
-          <div className="grid-3" style={{ marginBottom: 16 }}>
+          <div className="grid-4" style={{ marginBottom: 16 }}>
             <div className="stat">
               <div className="stat-value">{stats.totalScreenings}</div>
               <div className="stat-label">Screened in window</div>
@@ -102,6 +106,26 @@ export default function DashboardPage() {
                   : 'no timings yet'}
               </div>
             </div>
+            <div className="stat">
+              <div className="stat-value">
+                {stats.officerAgreement?.rate != null
+                  ? `${Math.round(stats.officerAgreement.rate * 100)}%`
+                  : '--'}
+              </div>
+              <div className="stat-label">Officers agreed with the system</div>
+              <div className="stat-note">{agreementNote(stats.officerAgreement)}</div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <h2>Screening volume</h2>
+            <p className="panel-note">
+              Throughput per period, split by what the system recommended. A referral rate
+              that climbs without the volume climbing is worth looking into.
+            </p>
+            <ErrorBoundary title="The volume chart could not be displayed">
+              <VolumeTrend series={stats.series} />
+            </ErrorBoundary>
           </div>
 
           <div className="grid-2">
@@ -138,6 +162,11 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="panel">
+                <h2>Findings by severity</h2>
+                <SeverityBars bySeverity={stats.bySeverity} />
               </div>
 
               <div className="panel">
@@ -223,6 +252,63 @@ function VerdictSplit({ byVerdict }) {
       </div>
     </>
   )
+}
+
+/**
+ * Findings grouped by how strongly each points at fraud.
+ *
+ * Severity is ordinal, so the order is fixed by rank rather than by count - a reader
+ * scanning for "how much CRITICAL is there" should always find it in the same place.
+ * Each row is labelled, so the bar colour is never the only thing carrying the level.
+ */
+function SeverityBars({ bySeverity }) {
+  const counts = bySeverity ?? {}
+  const total = Object.values(counts).reduce((sum, n) => sum + n, 0)
+
+  if (total === 0) {
+    return <div className="empty">No findings in this window.</div>
+  }
+
+  const max = Math.max(...SEVERITY_ORDER.map((level) => counts[level] ?? 0), 1)
+
+  return (
+    <div className="bar-list">
+      {SEVERITY_ORDER.filter((level) => counts[level]).map((level) => (
+        <div className="bar-row" key={level}>
+          <span className="bar-label">{SEVERITY_LABELS[level]}</span>
+          <span className="bar-count">{counts[level]}</span>
+          <span className="bar-track">
+            <span
+              className={`bar-fill severity-${level}`}
+              style={{ width: `${(counts[level] / max) * 100}%` }}
+            />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+
+const SEVERITY_LABELS = {
+  CRITICAL: 'Critical',
+  HIGH: 'High',
+  MEDIUM: 'Medium',
+  LOW: 'Low',
+  INFO: 'Informational',
+}
+
+/**
+ * A low agreement rate is a statement about the system, not the officers. A
+ * recommendation that is routinely overridden has thresholds that need re-examining,
+ * and nobody finds that out unless it is counted.
+ */
+function agreementNote(agreement) {
+  if (!agreement || agreement.decided === 0) return 'no decisions recorded yet'
+  if (agreement.rate >= 0.9) return `${agreement.decided} decisions recorded`
+  if (agreement.rate >= 0.7) return `${agreement.overridden} overridden - worth watching`
+  return `${agreement.overridden} overridden - review the thresholds`
 }
 
 /**

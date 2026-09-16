@@ -82,7 +82,7 @@ Write-Ok "Node $nodeVer found"
 
 # Python (only if face service enabled)
 if (-not $SkipFaceService) {
-    $pythonExe = Join-Path $root ".venv\Scripts\python.exe"
+    $pythonExe = Join-Path $root "venv\Scripts\python.exe"
     if (-not (Test-Path $pythonExe)) {
         $pythonExe = "python"
     }
@@ -103,15 +103,15 @@ if (-not $SkipFaceService) {
     $faceReqs = Join-Path $faceDir "requirements.txt"
 
     # Use project venv if available, else system python
-    $pipExe = Join-Path $root ".venv\Scripts\pip.exe"
-    $pyExe  = Join-Path $root ".venv\Scripts\python.exe"
+    $pipExe = Join-Path $root "venv\Scripts\pip.exe"
+    $pyExe  = Join-Path $root "venv\Scripts\python.exe"
     if (-not (Test-Path $pyExe)) {
         $pyExe = "python"
         $pipExe = "pip"
     }
 
-    # Install dependencies if insightface not present
-    $insightfaceCheck = & $pyExe -c "import insightface" 2>&1
+    # Install dependencies if opencv not present
+    $opencvCheck = & $pyExe -c "import cv2" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Step "Installing Python dependencies (first run)..."
         & $pipExe install -r $faceReqs --quiet 2>&1 | Write-Host
@@ -125,18 +125,26 @@ if (-not $SkipFaceService) {
         Write-Ok "Python dependencies already installed"
     }
 
-    # Download models if not cached
-    $modelDir = Join-Path $env:USERPROFILE ".cache\face-verification-models"
-    if (-not (Test-Path $modelDir)) {
-        Write-Step "Downloading face models (first run, ~200MB)..."
-        & $pyExe (Join-Path $faceDir "download_models.py")
-        if ($LASTEXITCODE -eq 0) {
+    # The models are ~40MB and are not in version control, so a fresh clone has none.
+    # Fetch them rather than merely warning: a face service that starts without a
+    # recognition model looks healthy and answers every comparison with an error.
+    $modelDir = Join-Path $faceDir "models"
+    $yunetModel = Join-Path $modelDir "yunet.onnx"
+    $sfaceModel = Join-Path $modelDir "face_recognizer_fast.onnx"
+    if (-not (Test-Path $yunetModel) -or -not (Test-Path $sfaceModel)) {
+        Write-Step "Face models not found - downloading (about 40MB, one time)..."
+        Push-Location $faceDir
+        & $pyExe "download_models.py"
+        $downloadOk = $LASTEXITCODE -eq 0
+        Pop-Location
+        if ($downloadOk) {
             Write-Ok "Face models downloaded"
         } else {
-            Write-Warn "Model download had issues — service may still work if models exist"
+            Write-Warn "Could not download the face models. Module 4 will report that it"
+            Write-Warn "did not run. Fetch them by hand into $modelDir"
         }
     } else {
-        Write-Ok "Face models already cached"
+        Write-Ok "Face models found"
     }
 
     # Start the service
@@ -258,7 +266,7 @@ if (-not $SkipFaceService) {
     $faceColor  = if ($faceStatus -eq "RUNNING") { "Green" } else { "Red" }
     Write-Host "  │  Face Verification   http://localhost:5000   " -NoNewline -ForegroundColor White
     Write-Host ("{0,-14}" -f $faceStatus) -ForegroundColor $faceColor
-    Write-Host "  │                          RetinaFace + ArcFace             │" -ForegroundColor DarkGray
+    Write-Host "  │                          YuNet + SFace (OpenCV)          │" -ForegroundColor DarkGray
 }
 
 $backStatus = if ($backendProc -and !$backendProc.HasExited) { "RUNNING" } else { "STOPPED" }

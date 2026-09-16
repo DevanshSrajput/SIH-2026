@@ -10,6 +10,7 @@ import com.govid.screening.pipeline.ImageStore;
 import com.govid.screening.pipeline.ScreeningService;
 import com.govid.screening.repository.AuditEventRepository;
 import com.govid.screening.repository.ScreeningCaseRepository;
+import com.govid.screening.support.Uploads;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,8 +19,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PagedModel;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -109,9 +110,8 @@ public class ScreeningController {
                     + "read. Trusted over pixel OCR when present.")
             @RequestParam(value = "text", required = false) String text) throws IOException {
 
-        if (document == null || document.isEmpty()) {
-            throw new IllegalArgumentException("A document image is required.");
-        }
+        Uploads.requireImage(document, "document");
+        Uploads.validateIfPresent(live, "live capture");
 
         return screeningService.screen(new ScreeningService.ScreeningRequest(
                 document.getBytes(),
@@ -129,13 +129,17 @@ public class ScreeningController {
             description = "Returns summary rows rather than whole cases so the list stays fast "
                     + "under load. `size` is capped at 100.")
     @GetMapping
-    public Page<CaseSummary> list(
+    public PagedModel<CaseSummary> list(
             @Parameter(description = "Zero-based page index.")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Rows per page. Values above 100 are clamped.")
             @RequestParam(defaultValue = "25") int size) {
-        return caseRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, Math.min(size, 100)))
-                .map(CaseSummary::from);
+        // PagedModel rather than Page: serialising a Page directly emits its internal
+        // structure, which Spring warns about on every call because that shape is not a
+        // stable API contract. PagedModel publishes an explicit `page` envelope instead.
+        return new PagedModel<>(caseRepository
+                .findAllByOrderByCreatedAtDesc(PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 100)))
+                .map(CaseSummary::from));
     }
 
     @Operation(summary = "Fetch one case in full",

@@ -14,6 +14,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import config as settings_module  # noqa: E402
+
 
 class TestLivenessDetector(unittest.TestCase):
     """Test liveness detection heuristics."""
@@ -139,7 +141,12 @@ class TestFaceRecognizer(unittest.TestCase):
         self.assertAlmostEqual(sim, 1.0, places=4)
 
     def test_cosine_similarity_orthogonal(self):
-        """Orthogonal embeddings should have similarity around 0.5."""
+        """Orthogonal embeddings score 0.0 - the raw cosine, not a rescaled 0.5.
+
+        This is the regression guard for the false-accept bug. An earlier version
+        mapped cosine [-1, 1] onto [0, 1] as ``(cos + 1) / 2``, which reported two
+        unrelated faces as "50% similar" and pushed them into the match band.
+        """
         from face_recognizer import FaceRecognizer
 
         emb1 = np.zeros(512, dtype=np.float64)
@@ -147,10 +154,11 @@ class TestFaceRecognizer(unittest.TestCase):
         emb2 = np.zeros(512, dtype=np.float64)
         emb2[1] = 1.0
         sim = FaceRecognizer.cosine_similarity(emb1, emb2)
-        self.assertAlmostEqual(sim, 0.5, places=4)
+        self.assertAlmostEqual(sim, 0.0, places=4)
+        self.assertLess(sim, settings_module.settings.MISMATCH_THRESHOLD)
 
     def test_cosine_similarity_opposite(self):
-        """Opposite embeddings should have similarity close to 0.0."""
+        """Opposite embeddings score -1.0 on the raw cosine scale."""
         from face_recognizer import FaceRecognizer
 
         emb1 = np.zeros(512, dtype=np.float64)
@@ -158,7 +166,18 @@ class TestFaceRecognizer(unittest.TestCase):
         emb2 = np.zeros(512, dtype=np.float64)
         emb2[0] = -1.0
         sim = FaceRecognizer.cosine_similarity(emb1, emb2)
-        self.assertAlmostEqual(sim, 0.0, places=4)
+        self.assertAlmostEqual(sim, -1.0, places=4)
+
+    def test_unrelated_embeddings_never_reach_match_threshold(self):
+        """Random unrelated embeddings must not be reported as a match."""
+        from face_recognizer import FaceRecognizer
+
+        rng = np.random.default_rng(20260917)
+        for _ in range(200):
+            a = rng.standard_normal(128)
+            b = rng.standard_normal(128)
+            sim = FaceRecognizer.cosine_similarity(a, b)
+            self.assertLess(sim, settings_module.settings.MATCH_THRESHOLD)
 
     def test_cosine_similarity_dimension_mismatch(self):
         """Mismatched dimensions should raise ValueError."""

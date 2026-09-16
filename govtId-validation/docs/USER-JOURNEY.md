@@ -456,7 +456,7 @@ cd backend && ./mvnw spring-boot:run -Pembedded-mongo
 With MongoDB available, use Docker and the plain run instead:
 
 ```bash
-docker compose up -d mongo
+docker compose up -d mongo    # from the repository root
 ```
 
 Frontend (proxies `/api` to `localhost:8080`):

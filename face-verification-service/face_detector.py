@@ -1,16 +1,19 @@
-"""Face detection using RetinaFace (insightface)."""
+"""Face detection using OpenCV FaceDetectorYN (YuNet)."""
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional
 
 import cv2
 import numpy as np
-from insightface.app import FaceAnalysis
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
+YUNET_MODEL = os.path.join(MODEL_DIR, "yunet.onnx")
 
 
 @dataclass
@@ -19,7 +22,8 @@ class DetectedFace:
 
     bbox: np.ndarray  # [x1, y1, x2, y2]
     confidence: float
-    landmarks: Optional[np.ndarray] = None  # 5 facial landmarks
+    landmarks: Optional[np.ndarray] = None
+    raw_detection: Optional[np.ndarray] = None  # Full 15-value YuNet output for alignCrop
 
     @property
     def width(self) -> float:
@@ -49,58 +53,71 @@ class DetectedFace:
 
 
 class FaceDetector:
-    """RetinaFace-based face detector with automatic model management."""
+    """OpenCV FaceDetectorYN (YuNet) face detector."""
 
     def __init__(self):
-        self._app: Optional[FaceAnalysis] = None
-        self._loaded = False
+        self._detector: Optional[cv2.FaceDetectorYN] = None
 
-    def _ensure_loaded(self) -> FaceAnalysis:
-        if self._app is None:
-            logger.info("Loading RetinaFace detector (model: %s)", settings.FACE_DETECTOR_MODEL)
-            self._app = FaceAnalysis(
-                name=settings.FACE_DETECTOR_MODEL,
-                root=str(settings.MODEL_DIR),
-                providers=["CPUExecutionProvider"],
+    def _ensure_loaded(self):
+        if self._detector is not None:
+            return
+
+        if not os.path.exists(YUNET_MODEL):
+            raise FileNotFoundError(
+                f"Face detection model not found: {YUNET_MODEL}. "
+                "Download yunet.onnx from the OpenCV Zoo."
             )
-            self._app.prepare(ctx_id=0, det_size=(640, 640))
-            self._loaded = True
-            logger.info("RetinaFace detector loaded successfully")
-        return self._app
+
+        logger.info("Loading YuNet face detector from %s", YUNET_MODEL)
+        self._detector = cv2.FaceDetectorYN_create(YUNET_MODEL, "", (0, 0))
+        self._detector.setNMSThreshold(0.3)
+        self._detector.setScoreThreshold(settings.DETECTION_CONFIDENCE)
+        logger.info("YuNet face detector loaded successfully")
 
     def detect(self, image: np.ndarray) -> list[DetectedFace]:
-        """
-        Detect faces in an image.
-
-        Args:
-            image: BGR image (OpenCV format).
-
-        Returns:
-            List of DetectedFace objects, sorted by confidence (highest first).
-
-        Raises:
-            ValueError: If image is invalid or empty.
-        """
+        """Detect faces in a BGR image using YuNet."""
         if image is None or image.size == 0:
             raise ValueError("Image is empty or invalid")
 
-        app = self._ensure_loaded()
-        faces = app.get(image)
+        self._ensure_loaded()
 
-        if not faces:
+        h, w = image.shape[:2]
+        self._detector.setInputSize((w, h))
+
+        retval, faces = self._detector.detect(image)
+
+        if retval is None or faces is None or len(faces) == 0:
             logger.debug("No faces detected in image")
             return []
 
         detected = []
-        for face in faces:
-            bbox = face.bbox.astype(np.float32)
-            confidence = float(face.det_score)
+        for face_data in faces:
+            # YuNet row layout is:
+            #   [x, y, w, h,
+            #    x_righteye, y_righteye, x_lefteye, y_lefteye, x_nose, y_nose,
+            #    x_rightmouth, y_rightmouth, x_leftmouth, y_leftmouth,
+            #    score]
+            #
+            # The score is the LAST element, not index 4. Reading index 4 as the
+            # confidence takes the right eye's x-coordinate instead - which is why
+            # scores used to come back as 233 rather than 0.7 - and shifts every
+            # landmark by one slot. Misaligned landmarks feed alignCrop a face warped
+            # to the wrong canonical position, which degrades the embedding and pulls
+            # unrelated faces together: a false-accept source hiding in an index.
+            x1, y1, w_box, h_box = face_data[:4]
+            confidence = float(face_data[-1])
+            bbox = np.array([float(x1), float(y1), float(x1 + w_box), float(y1 + h_box)])
 
-            if confidence < settings.DETECTION_CONFIDENCE:
-                continue
+            landmarks = None
+            if len(face_data) >= 15:
+                landmarks = np.array(face_data[4:14]).reshape(5, 2)
 
-            landmarks = face.kps if hasattr(face, "kps") else None
-            detected.append(DetectedFace(bbox=bbox, confidence=confidence, landmarks=landmarks))
+            detected.append(DetectedFace(
+                bbox=bbox,
+                confidence=confidence,
+                landmarks=landmarks,
+                raw_detection=face_data.astype(np.float32),
+            ))
 
         detected.sort(key=lambda f: f.confidence, reverse=True)
 
@@ -112,7 +129,7 @@ class FaceDetector:
             )
             detected = detected[: settings.MAX_FACES_PER_IMAGE]
 
-        logger.debug("Detected %d face(s) with confidence >= %.2f", len(detected), settings.DETECTION_CONFIDENCE)
+        logger.debug("Detected %d face(s)", len(detected))
         return detected
 
     def detect_from_bytes(self, image_bytes: bytes) -> list[DetectedFace]:

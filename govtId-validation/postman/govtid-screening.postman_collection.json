@@ -2,16 +2,46 @@
   "info": {
     "_postman_id": "b1f4a0c2-5d3e-4a71-9c8b-0f2e6a7d1c40",
     "name": "GovtID Screening API",
-    "description": "AI-Based Fake Identity & Document Screening System.\n\nAll endpoints are served by the Spring Boot backend (default http://localhost:8080).\n\nStart the API with:\n  cd backend && ./mvnw spring-boot:run -Pembedded-mongo\n\nCollection variables:\n- baseUrl          API root, default http://localhost:8080\n- caseReference    auto-populated by \"Screen a document\" and \"List cases\"\n- watchlistEntryId auto-populated by \"Add watchlist entry\" and \"List watchlist\"\n- officerId        officer identifier sent on decisions and watchlist writes",
+    "description": "Officer-facing API for the AI-Based Fake Identity & Document Screening System.\n\nSet `baseUrl` to the running API (default http://localhost:8080).\n\nNote: paged endpoints return a PagedModel envelope - `content` plus a `page` object carrying size, number, totalElements and totalPages.\n\nWrite requests are rate limited per client; reads are not. Responses carry X-RateLimit-* headers.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
-    { "key": "caseReference", "value": "", "type": "string" },
-    { "key": "watchlistEntryId", "value": "", "type": "string" },
-    { "key": "officerId", "value": "OFFICER-01", "type": "string" },
-    { "key": "checkpointId", "value": "CHK-NORTH", "type": "string" },
-    { "key": "laneId", "value": "LANE-3", "type": "string" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "caseReference",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "watchlistEntryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "officerId",
+      "value": "OFFICER-01",
+      "type": "string"
+    },
+    {
+      "key": "checkpointId",
+      "value": "CHK-NORTH",
+      "type": "string"
+    },
+    {
+      "key": "laneId",
+      "value": "LANE-3",
+      "type": "string"
+    },
+    {
+      "key": "faceEnrolmentId",
+      "value": "",
+      "type": "string",
+      "description": "Internal id of a face enrolment, from the list endpoint."
+    }
   ],
   "item": [
     {
@@ -90,8 +120,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/screenings",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings"
+              ]
             },
             "description": "Runs the full pipeline: OCR -> validation -> tampering -> face -> watchlist -> risk engine.\n\nReturns the complete ScreeningCase including the RiskAssessment (score, band, verdict) and every RiskFlag with its evidence map.\n\nSelect a local image file for the `document` part before sending - Postman does not persist file paths in exported collections."
           },
@@ -120,11 +155,24 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/screenings?page=0&size=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings"
+              ],
               "query": [
-                { "key": "page", "value": "0", "description": "Zero-based page index. Default 0." },
-                { "key": "size", "value": "25", "description": "Page size. Default 25, capped at 100." }
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Zero-based page index. Default 0."
+                },
+                {
+                  "key": "size",
+                  "value": "25",
+                  "description": "Page size. Default 25, capped at 100."
+                }
               ]
             },
             "description": "Paged case list, newest first. Returns lightweight CaseSummary rows, not full cases."
@@ -138,8 +186,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/screenings/{{caseReference}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings", "{{caseReference}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings",
+                "{{caseReference}}"
+              ]
             },
             "description": "Full case by case reference, or by raw Mongo id. Returns 400 with an error body if unknown."
           },
@@ -152,8 +206,15 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/audit",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings", "{{caseReference}}", "audit"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings",
+                "{{caseReference}}",
+                "audit"
+              ]
             },
             "description": "Audit events for the case in chronological order."
           },
@@ -166,8 +227,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/images/document",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings", "{{caseReference}}", "images", "document"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings",
+                "{{caseReference}}",
+                "images",
+                "document"
+              ]
             },
             "description": "Stored document evidence image from GridFS. 404 if none was stored."
           },
@@ -180,8 +249,16 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/images/live",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings", "{{caseReference}}", "images", "live"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings",
+                "{{caseReference}}",
+                "images",
+                "live"
+              ]
             },
             "description": "Stored live-capture evidence image. 404 if the screening had no live capture. Any kind other than `document` or `live` returns 400."
           },
@@ -192,19 +269,233 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "options": { "raw": { "language": "json" } },
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
               "raw": "{\n  \"decision\": \"REVIEW\",\n  \"officerId\": \"{{officerId}}\",\n  \"notes\": \"Referred to secondary inspection; MRZ check digit mismatch on document number.\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/screenings/{{caseReference}}/decision",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "screenings", "{{caseReference}}", "decision"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "screenings",
+                "{{caseReference}}",
+                "decision"
+              ]
             },
             "description": "Records the officer determination alongside the system recommendation.\n\ndecision (required): CLEAR | REVIEW | REJECT\nofficerId: max 120 chars\nnotes: max 2000 chars"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Face Authentication",
+      "description": "1:1 verification, enrolment and 1:N identification.\n\nRead `decision` (MATCH / NO_MATCH / UNCERTAIN), not `similarity`. A positive identification requires a decisive score AND two usable images AND a passed liveness check AND one face in the live frame. Anything short of that returns UNCERTAIN with `blockers` saying why and `recaptureAdvice` saying what to do.\n\n`similarity` is a RAW COSINE, not a percentage: two different people score 0.00-0.25, the same person 0.40-0.75.",
+      "item": [
+        {
+          "name": "Compare faces (1:1)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": [],
+                  "description": "Document image containing the portrait photo."
+                },
+                {
+                  "key": "live",
+                  "type": "file",
+                  "src": [],
+                  "description": "Live camera capture of the person."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/face",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "face"
+              ]
+            },
+            "description": "Runs detection, quality assessment, liveness checking and embedding comparison. Returns a three-way decision with the reasons behind it."
+          },
+          "response": []
+        },
+        {
+          "name": "Enrol a reference face",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Reference image of the traveller."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/face/enrolments?subjectId=P1234567&displayName=Example Traveller&documentNumber=P1234567&nationality=IND&source=live&enrolledBy={{officerId}}&acceptPoorQuality=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "face",
+                "enrolments"
+              ],
+              "query": [
+                {
+                  "key": "subjectId",
+                  "value": "P1234567",
+                  "description": "Stable identifier for this person. Required."
+                },
+                {
+                  "key": "displayName",
+                  "value": "Example Traveller"
+                },
+                {
+                  "key": "documentNumber",
+                  "value": "P1234567"
+                },
+                {
+                  "key": "nationality",
+                  "value": "IND"
+                },
+                {
+                  "key": "source",
+                  "value": "live",
+                  "description": "'live' or 'document'."
+                },
+                {
+                  "key": "enrolledBy",
+                  "value": "{{officerId}}"
+                },
+                {
+                  "key": "acceptPoorQuality",
+                  "value": "false",
+                  "description": "Override the quality gate. Recorded in the audit trail."
+                }
+              ]
+            },
+            "description": "Stores an L2-normalised embedding against a subject, so a repeat crossing can be matched without relying on the printed portrait.\n\nThe image must clear the quality gate. A poor enrolment is not a one-off wrong answer - it becomes a permanent source of wrong answers for every future comparison against that person."
+          },
+          "response": []
+        },
+        {
+          "name": "List enrolments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/face/enrolments?page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "face",
+                "enrolments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Newest first. Includes withdrawn enrolments; check `active`."
+          },
+          "response": []
+        },
+        {
+          "name": "Withdraw an enrolment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/face/enrolments/{{faceEnrolmentId}}?actor={{officerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "face",
+                "enrolments",
+                "{{faceEnrolmentId}}"
+              ],
+              "query": [
+                {
+                  "key": "actor",
+                  "value": "{{officerId}}"
+                }
+              ]
+            },
+            "description": "Marks the enrolment inactive so it is no longer matched against. It is never deleted - the record that a face was enrolled is part of the audit trail."
+          },
+          "response": []
+        },
+        {
+          "name": "Identify a face (1:N)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": [],
+                  "description": "Live capture of the person to identify."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/face/identify?limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "face",
+                "identify"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Searches the enrolled gallery. Held to a stricter bar than 1:1: the top candidate must clear a higher threshold AND beat the best-scoring different person by a margin. Two near-equal candidates return AMBIGUOUS rather than naming either - that is a pair of lookalikes, not an identification."
           },
           "response": []
         }
@@ -237,11 +528,24 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/watchlist?page=0&size=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "watchlist"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist"
+              ],
               "query": [
-                { "key": "page", "value": "0", "description": "Zero-based page index. Default 0." },
-                { "key": "size", "value": "50", "description": "Page size. Default 50, capped at 200." }
+                {
+                  "key": "page",
+                  "value": "0",
+                  "description": "Zero-based page index. Default 0."
+                },
+                {
+                  "key": "size",
+                  "value": "50",
+                  "description": "Page size. Default 50, capped at 200."
+                }
               ]
             },
             "description": "Paged watchlist entries, most recently added first."
@@ -269,17 +573,29 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "options": { "raw": { "language": "json" } },
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
               "raw": "{\n  \"documentNumber\": \"X1234567\",\n  \"surname\": \"MUELLER\",\n  \"givenNames\": \"ANNA MARIA\",\n  \"dateOfBirth\": \"1988-04-17\",\n  \"nationality\": \"DEU\",\n  \"listType\": \"STOLEN_DOCUMENT\",\n  \"severity\": \"CRITICAL\",\n  \"reason\": \"Reported stolen by the issuing authority on 2026-07-02.\",\n  \"source\": \"INTERPOL SLTD\",\n  \"addedBy\": \"{{officerId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/watchlist",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "watchlist"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist"
+              ]
             },
             "description": "Creates a watchlist entry.\n\nRequires either a documentNumber, or a surname together with a dateOfBirth - a name alone is too common to match on safely; anything else returns 400.\n\nlistType (required): STOLEN_DOCUMENT | REVOKED_DOCUMENT | ENTRY_BAN | WANTED | VISA_OVERSTAY | LOCAL_INTEREST\nseverity: INFO | LOW | MEDIUM | HIGH | CRITICAL (defaults to CRITICAL)\n\nField limits: documentNumber 40, surname/givenNames 80, nationality 3 (ISO-3166 alpha-3), reason 500, source/addedBy 120."
           },
@@ -290,17 +606,29 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "options": { "raw": { "language": "json" } },
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
               "raw": "{\n  \"surname\": \"OKONKWO\",\n  \"givenNames\": \"DANIEL\",\n  \"dateOfBirth\": \"1979-11-30\",\n  \"nationality\": \"NGA\",\n  \"listType\": \"ENTRY_BAN\",\n  \"severity\": \"HIGH\",\n  \"reason\": \"Entry ban in force until 2028-01-01.\",\n  \"source\": \"NATIONAL IMMIGRATION\",\n  \"addedBy\": \"{{officerId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/watchlist",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "watchlist"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist"
+              ]
             },
             "description": "Name-and-date-of-birth entry, matched on the normalised identity key rather than a document number."
           },
@@ -313,13 +641,144 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/watchlist/{{watchlistEntryId}}?actor={{officerId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "watchlist", "{{watchlistEntryId}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist",
+                "{{watchlistEntryId}}"
+              ],
               "query": [
-                { "key": "actor", "value": "{{officerId}}", "description": "Optional. Recorded on the audit event." }
+                {
+                  "key": "actor",
+                  "value": "{{officerId}}",
+                  "description": "Optional. Recorded on the audit event."
+                }
               ]
             },
             "description": "Deactivates rather than deletes: a watchlist is evidence, and removing the row would erase the reason any past case was rejected. Returns the updated entry with active=false."
+          },
+          "response": []
+        },
+        {
+          "name": "Update watchlist entry",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentNumber\": \"P1234567\",\n  \"surname\": \"EXAMPLE\",\n  \"givenNames\": \"TEST\",\n  \"dateOfBirth\": \"1985-04-12\",\n  \"nationality\": \"IND\",\n  \"listType\": \"STOLEN_DOCUMENT\",\n  \"severity\": \"CRITICAL\",\n  \"reason\": \"Corrected document number after a transcription error\",\n  \"source\": \"Corrected by checkpoint intelligence\",\n  \"addedBy\": \"{{officerId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist/{{watchlistEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist",
+                "{{watchlistEntryId}}"
+              ]
+            },
+            "description": "Replaces the entry's details and rebuilds its lookup keys, so correcting a mistyped document number makes the entry start matching rather than leaving a silent no-op on the list. The original addedAt and addedBy are preserved."
+          },
+          "response": []
+        },
+        {
+          "name": "Reactivate watchlist entry",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist/{{watchlistEntryId}}/reactivate?actor={{officerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist",
+                "{{watchlistEntryId}}",
+                "reactivate"
+              ],
+              "query": [
+                {
+                  "key": "actor",
+                  "value": "{{officerId}}"
+                }
+              ]
+            },
+            "description": "Puts a withdrawn entry back on the list, for one stood down in error."
+          },
+          "response": []
+        },
+        {
+          "name": "Import watchlist entries",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"documentNumber\": \"P7654321\",\n    \"surname\": \"IMPORTED\",\n    \"givenNames\": \"ONE\",\n    \"dateOfBirth\": \"1979-11-02\",\n    \"nationality\": \"NPL\",\n    \"listType\": \"REVOKED_DOCUMENT\",\n    \"severity\": \"CRITICAL\",\n    \"reason\": \"Revoked by the issuing authority\",\n    \"source\": \"Upstream agency feed\"\n  },\n  {\n    \"surname\": \"IMPORTED\",\n    \"givenNames\": \"TWO\",\n    \"dateOfBirth\": \"1990-06-21\",\n    \"nationality\": \"BGD\",\n    \"listType\": \"ENTRY_BAN\",\n    \"severity\": \"HIGH\",\n    \"reason\": \"Entry ban in force\",\n    \"source\": \"Upstream agency feed\"\n  }\n]",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist/import?actor={{officerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist",
+                "import"
+              ],
+              "query": [
+                {
+                  "key": "actor",
+                  "value": "{{officerId}}"
+                }
+              ]
+            },
+            "description": "Rows are applied independently; a bad row does not abort the import. A feed from an upstream agency routinely carries records that fail validation, and rejecting the whole file over three of them would leave the entire list un-updated. The response names every rejected row and why."
+          },
+          "response": []
+        },
+        {
+          "name": "Export watchlist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/watchlist/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "watchlist",
+                "export"
+              ]
+            },
+            "description": "Every entry, active and withdrawn, as a JSON array. The shape round-trips through the import endpoint."
           },
           "response": []
         }
@@ -335,10 +794,19 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/stats?windowHours=24",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "stats"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stats"
+              ],
               "query": [
-                { "key": "windowHours", "value": "24", "description": "Rolling window in hours. Default 24, floored at 1." }
+                {
+                  "key": "windowHours",
+                  "value": "24",
+                  "description": "Rolling window in hours. Default 24, floored at 1."
+                }
               ]
             },
             "description": "Shift-level view: throughput, referral rate, median and slowest processing time, breakdown by verdict and document type, top 10 flag codes, and the five highest-risk cases in the window."
@@ -358,8 +826,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/actuator/health",
-              "host": ["{{baseUrl}}"],
-              "path": ["actuator", "health"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
             },
             "description": "Liveness check. Details are shown only when authorized."
           },
@@ -372,8 +845,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/actuator/info",
-              "host": ["{{baseUrl}}"],
-              "path": ["actuator", "info"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "info"
+              ]
             }
           },
           "response": []
@@ -385,8 +863,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/actuator/metrics",
-              "host": ["{{baseUrl}}"],
-              "path": ["actuator", "metrics"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "metrics"
+              ]
             },
             "description": "Lists available metric names. Append a name, e.g. /actuator/metrics/http.server.requests, for a single metric."
           },

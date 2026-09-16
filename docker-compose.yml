@@ -1,0 +1,123 @@
+# All three services plus MongoDB.
+#
+#   docker compose up --build
+#
+# Console            http://localhost:5173
+# Screening API      http://localhost:8080  (Swagger UI at /swagger-ui.html)
+# Face service       http://localhost:5000  (OpenAPI at /docs)
+#
+# The face models are baked into the face-service image rather than downloaded at
+# startup. A border post is exactly the deployment that cannot assume outbound
+# internet, and an image that silently starts with no recognition model is worse
+# than one that fails to build.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: govtid_screening
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      # Bound to loopback: case history is evidence, and it has no business being
+      # reachable from the checkpoint LAN just because the container is running.
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Database browser, for inspecting cases during development.
+  #
+  # Behind the `tools` profile so it never starts by accident:
+  #   docker compose --profile tools up -d mongo-express
+  #
+  # It is unauthenticated and it can read every screening case, so it has no business
+  # on any shared environment.
+  mongo-express:
+    image: mongo-express:1.0.2
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    profiles: ["tools"]
+
+  face-service:
+    build:
+      context: ./face-verification-service
+    restart: unless-stopped
+    environment:
+      FACE_SERVICE_PORT: "5000"
+      LOG_LEVEL: INFO
+      # Thresholds are raw SFace cosine similarities, not rescaled percentages.
+      # Verify them against your own cameras and scanners before going live:
+      #   python calibrate.py <samples-dir>
+      MATCH_THRESHOLD: "0.46"
+      MISMATCH_THRESHOLD: "0.28"
+      IDENTIFY_THRESHOLD: "0.52"
+      FACE_ENROLMENT_DB: /data/enrolments.json
+    volumes:
+      # The standalone enrolment gallery. In the full stack the authoritative
+      # registry is in MongoDB; this is what lets the service run on its own at an
+      # edge node.
+      - face-data:/data
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  backend:
+    build:
+      context: ./govtId-validation/backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      face-service:
+        # started, not healthy: Module 4 reporting FAILED is a correct, visible
+        # outcome, and the other three modules must not be held up waiting for it.
+        condition: service_started
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/govtid_screening
+      FACE_SERVICE_URL: http://face-service:5000
+      CORS_ORIGINS: http://localhost:5173
+      SERVER_PORT: "8080"
+      # Tesseract is installed in the backend image; the engine finds it without
+      # any PATH configuration.
+      TESSERACT_BINARY: tesseract
+      # Vision OCR stays inactive unless a credential is supplied.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./govtId-validation/frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:80"
+
+volumes:
+  mongo-data:
+  face-data:

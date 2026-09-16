@@ -37,9 +37,25 @@
 - [x] Per-technique corroboration
 
 ### Module 4 — Face Verification
-- [x] `FaceVerifier` contract with two-threshold decision
-- [x] HTTP delegate to an external biometric service
+- [x] `FaceVerifier` contract returning a three-way `FaceDecision`: MATCH / NO_MATCH /
+      UNCERTAIN, with reasons, blockers and re-capture advice
+- [x] HTTP delegate to the dedicated face service; its verdict is passed through, because
+      the matcher saw the pixels and the screening service did not
 - [x] Honest unavailability: no similarity is estimated when no matcher is configured
+- [x] Raw-cosine thresholds calibrated against SFace's published break-even, replacing a
+      rescaling that compressed strangers and genuine matches into the same band
+- [x] Image quality gate — resolution, focus, exposure, contrast, head pose, detector
+      confidence. Every check must pass, not merely the average
+- [x] Liveness gating: a failed anti-spoofing check cannot coexist with a positive
+      identification
+- [x] `FACE_QUALITY_INSUFFICIENT` and `FACE_LIVENESS_SUSPECT` flagged in their own right,
+      separate from the similarity verdict
+- [x] Face enrolment persisted in MongoDB, and 1:N identification with a stricter threshold
+      plus a runner-up margin so lookalikes return AMBIGUOUS rather than a name
+- [x] `calibrate.py` — measures the genuine and impostor distributions on real captures and
+      reports the false accept rate at the configured threshold
+- [x] The in-process OpenCV fallback removed: its detector produced no landmarks, so it
+      could never align a crop and therefore never confirm an identity
 
 ### Watchlist and identity screening
 - [x] Blacklist matching on document number and identity

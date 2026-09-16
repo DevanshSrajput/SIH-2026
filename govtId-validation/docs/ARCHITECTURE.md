@@ -80,8 +80,26 @@ If a capability is unconfigured, its module reports `SKIPPED` or `FAILED` with a
 does not produce a plausible-looking number. `FaceVerificationService` deliberately has no
 built-in fallback matcher for this reason.
 
+An in-process OpenCV fallback did exist and was removed. Its detector reported a bounding
+box and no facial landmarks, so it could never align a crop to SFace's canonical layout —
+and an unaligned crop shifts every embedding in a common direction, dragging unrelated
+faces together. A fallback that cannot confirm an identity is not a fallback; keeping it
+would have meant keeping something that *looked* like a safety net.
+
 The risk engine then refuses to return `CLEAR` when a module *failed*: missing evidence is
 not absence of evidence, and a case cannot be cleared on an examination that did not finish.
+
+### Uncertainty is a first-class answer
+
+Module 4 returns MATCH, NO_MATCH or **UNCERTAIN**. A positive identification requires a
+decisive score *and* two usable images *and* a passed liveness check *and* one face in the
+live frame *and* landmark-aligned crops. Failing any of those returns UNCERTAIN with the
+reason attached, however high the similarity is.
+
+Nothing downstream can upgrade an UNCERTAIN to a MATCH — `FaceVerificationService` only
+ever moves a decision *toward* uncertainty. The asymmetry is deliberate: a false accept
+waves an impostor through on someone else's passport, while a false referral costs an
+officer a few seconds.
 
 ### Findings carry their evidence
 
